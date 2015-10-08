@@ -1,0 +1,156 @@
+---
+# Installation and basic configuration
+- name: Install exim
+  apt: name=exim4-daemon-light
+- name: Configure exim
+  template: src=update-exim4.conf.conf dest=/etc/exim4/update-exim4.conf.conf
+  notify:
+    - update-exim4.conf
+- name: Configure mailname
+  copy: dest=/etc/mailname content="{{ exim_mailname }}\n"
+  notify:
+    - Restart exim
+- name: Do not use ident
+  lineinfile:
+    dest: /etc/exim4/conf.d/main/02_exim4-config_options
+    regexp: "^rfc1413_query_timeout"
+    insertafter: "^# rfc1413_query_timeout"
+    line: "rfc1413_query_timeout = 0s"
+  notify:
+    - update-exim4.conf
+
+# Root alias
+- name: Set root alias
+  lineinfile:
+    dest: /etc/aliases
+    line: "root: {{ admins }}"
+    regexp: "^root:.*$"
+
+# Open up firewall port 25 when we receive mail, close it when not
+- name: Open firewall port 25
+  ufw: proto=tcp port=25 rule=allow
+  when: exim_receive_mail | bool
+- name: Close firewall port 25
+  ufw: proto=tcp port=25 rule=allow delete=yes
+  when: not (exim_receive_mail | bool)
+
+# Smarthost authentication (when we are clients of another smarthost)
+- name: Configure exim smarthost authentication
+  copy: >
+    content="{{ exim_smarthost_rdns }}:{{ exim_smarthost_username }}:{{ exim_smarthost_password }}\n"
+    dest=/etc/exim4/passwd.client
+    group=Debian-exim
+    mode=640
+  notify:
+    - Restart exim
+  when: exim_smarthost_rdns is defined
+- name: Open firewall port 587
+  ufw: proto=tcp port=587 rule=allow
+  when: exim_be_smarthost | bool
+- name: Remove smarthost authentication
+  file: dest=/etc/exim4/passwd.client state=absent
+  when: exim_smarthost_rdns is not defined
+
+# Additional exim configuration for when we are a smarthost
+- name: Listen on port 587
+  lineinfile:
+    dest: /etc/default/exim4
+    regexp: ^SMTPLISTENEROPTIONS=
+    line: SMTPLISTENEROPTIONS='-oX 587:25 -oP /run/exim4/exim.pid'
+  when: exim_be_smarthost | bool
+  notify:
+    - Restart exim
+- name: Enable TLS on port 587
+  copy:
+    dest: /etc/exim4/conf.d/main/000_localmacros
+    content: "MAIN_TLS_ENABLE = true\n"
+  when: exim_be_smarthost | bool
+  notify:
+    - update-exim4.conf
+- name: Enable authentication
+  copy:
+    dest: /etc/exim4/conf.d/auth/31_exim4-authentication
+    src: 31_exim4-authentication
+  when: exim_be_smarthost | bool
+  notify:
+    - update-exim4.conf
+
+# Install encryption keys (when we are a smarthost)
+- name: Install exim private key
+  copy:
+    dest: /etc/exim4/exim.key
+    group: Debian-exim
+    mode: 0640
+    content: "{{ exim_key }}"
+  when: exim_be_smarthost | bool
+  notify:
+    - Restart exim
+- name: Install exim public key
+  copy:
+    dest: /etc/exim4/exim.crt
+    content: "{{ exim_crt }}{{ exim_chain_certificates }}"
+  when: exim_be_smarthost | bool
+  notify:
+    - Restart exim
+
+# Install sasl (when we are a smarthost)
+- name: Install sasl2-bin
+  apt: name=sasl2-bin
+  when: exim_be_smarthost | bool
+- name: Set saslauthd to start automatically
+  lineinfile:
+    dest: /etc/default/saslauthd
+    regexp: ^START=
+    line: START=yes
+  when: exim_be_smarthost | bool
+  notify:
+    - Restart saslauthd
+- name: Add Debian-exim to group sasl
+  user: name=Debian-exim groups=sasl append=yes
+  when: exim_be_smarthost | bool
+  notify:
+    - Restart exim
+
+# When we are not a smarthost, revoke smarthost configuration.
+# This does not uninstall or touch sasl, and does not remove user
+# Debian-exim from the sasl group, but it does close firewall port 587
+# and does mostly everything else.
+- name: Do not listen on port 587
+  lineinfile:
+    dest: /etc/default/exim4
+    regexp: ^SMTPLISTENEROPTIONS=
+    line: SMTPLISTENEROPTIONS=''
+  when: not (exim_be_smarthost | bool)
+  notify:
+    - Restart exim
+- name: Close firewall port 587
+  ufw: proto=tcp port=587 rule=allow delete=yes
+  when: not (exim_be_smarthost) | bool
+- name: Remove TLS configuration for port 587
+  file:
+    dest: /etc/exim4/conf.d/main/000_localmacros
+    state: absent
+  when: not (exim_be_smarthost | bool)
+  notify:
+    - update-exim4.conf
+- name: Remove authentication configuration
+  file:
+    dest: /etc/exim4/conf.d/auth/31_exim4-authentication
+    state: absent
+  when: not (exim_be_smarthost | bool)
+  notify:
+    - update-exim4.conf
+- name: Remove exim private key
+  file:
+    dest: /etc/exim4/exim.key
+    state: absent
+  when: not (exim_be_smarthost | bool)
+  notify:
+    - Restart exim
+- name: Remove exim public key
+  file:
+    dest: /etc/exim4/exim.crt
+    state: absent
+  when: not (exim_be_smarthost | bool)
+  notify:
+    - Restart exim

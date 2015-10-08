@@ -1,0 +1,11 @@
+---
+- name: update-exim4.conf
+  command: update-exim4.conf
+  notify:
+    - Restart exim
+
+- name: Restart exim
+  command: /etc/init.d/exim4 restart
+
+- name: Restart saslauthd
+  command: /etc/init.d/saslauthd restart

@@ -1,0 +1,13 @@
+# This configuration has been copied from
+# /etc/exim4/conf.d/auth/30_exim4-config_examples.
+# It enables authentication against local passwords using sasl2-bin.
+
+plain_saslauthd_server:
+  driver = plaintext
+  public_name = PLAIN
+  server_condition = ${if saslauthd{{$auth2}{$auth3}}{1}{0}}
+  server_set_id = $auth2
+  server_prompts = :
+  .ifndef AUTH_SERVER_ALLOW_NOTLS_PASSWORDS
+  server_advertise_condition = ${if eq{$tls_cipher}{}{}{*}}
+  .endif

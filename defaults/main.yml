@@ -1,0 +1,3 @@
+---
+exim_receive_mail: no
+exim_be_smarthost: no

@@ -1,0 +1,11 @@
+---
+galaxy_info:
+  author: Antonis Christofides
+  description: Ansible role for installing and configuring Exim
+  license: GPLv3
+  platforms:
+  - name: Debian
+    versions:
+    - jessie
+
+dependencies: {}
