@@ -28,10 +28,18 @@
 
 # Open up firewall port 25 when we receive mail, close it when not
 - name: Open firewall port 25
-  ufw: proto=tcp port=25 rule=allow
+  lineinfile:
+    path: /etc/ferm/ansible-late
+    line: "proto tcp dport smtp ACCEPT;"
+  notify: Reload ferm
   when: exim_receive_mail | bool
+
 - name: Close firewall port 25
-  ufw: proto=tcp port=25 rule=allow delete=yes
+  lineinfile:
+    path: /etc/ferm/ansible-late
+    line: "proto tcp dport smtp ACCEPT;"
+    state: absent
+  notify: Reload ferm
   when: not (exim_receive_mail | bool)
 
 # Smarthost authentication (when we are clients of another smarthost)
@@ -45,7 +53,10 @@
     - Restart exim
   when: exim_smarthost_rdns is defined
 - name: Open firewall port 587
-  ufw: proto=tcp port=587 rule=allow
+  lineinfile:
+    path: /etc/ferm/ansible-late
+    line: "proto tcp dport submission ACCEPT;"
+  notify: Reload ferm
   when: exim_be_smarthost | bool
 - name: Remove smarthost authentication
   file: dest=/etc/exim4/passwd.client state=absent
@@ -124,7 +135,11 @@
   notify:
     - Restart exim
 - name: Close firewall port 587
-  ufw: proto=tcp port=587 rule=allow delete=yes
+  lineinfile:
+    path: /etc/ferm/ansible-late
+    line: "proto tcp dport submission ACCEPT;"
+    state: absent
+  notify: Reload ferm
   when: not (exim_be_smarthost) | bool
 - name: Remove TLS configuration for port 587
   file:

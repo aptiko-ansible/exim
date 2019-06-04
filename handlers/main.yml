@@ -9,3 +9,6 @@
 
 - name: Restart saslauthd
   command: /etc/init.d/saslauthd restart
+
+- name: Reload ferm
+  service: name=ferm state=reloaded
